@@ -25,53 +25,11 @@ CHANNEL_POSITIONS = [
 ]
 
 
-# @dataclass
-# class EEGData:
-#     """Class to encapsulate EEG data and metadata."""
-#     dataname: str
-#     data: np.ndarray  # EEG data array (n_samples, n_channels, n_timepoints)
-#     labels: np.ndarray  # Corresponding labels (n_samples,)
-#     fs: int  # Sampling frequency
-#     channel_names: Optional[list] = None  # Optional metadata
-
-#     # def __post_init__(self):
-#     #     """
-#     #     Validate the shape of the data and labels after initialization.
-#     #     """
-#     #     # Validate data shape
-#     #     if self.data.ndim != 4:
-#     #         raise ValueError(f"Data must be 3-dimensional (n_samples, n_channels, n_timepoints). Got shape: {self.data.shape}")
-        
-#     #     # Validate labels shape
-#     #     if self.labels.ndim != 3:
-#     #         raise ValueError(f"Labels must be 1-dimensional (n_samples,). Got shape: {self.labels.shape}")
-        
-#     #     # Check if the number of samples matches between data and labels
-#     #     if self.data.shape[0] != self.labels.shape[0]:
-#     #         raise ValueError(
-#     #             f"Number of samples in data ({self.data.shape[0]}) does not match number of labels ({self.labels.shape[0]})."
-#     #         )
-
-#     def save_to_cache(self, cache_file: str) -> None:
-#         """Save EEGData object to a cache file."""
-#         logging.info(f'Saving data to cache file {cache_file}...')
-#         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-#         with open(cache_file, 'wb') as f:
-#             pickle.dump(self, f)
-
-#     @staticmethod
-#     def load_from_cache(cache_file: str) -> Optional['EEGData']:
-#         """Load EEGData object from a cache file if it exists."""
-#         if os.path.exists(cache_file):
-#             logging.info(f'Loading cached data from {cache_file}...')
-#             with open(cache_file, 'rb') as f:
-#                 return pickle.load(f)
-#         return None
-
 
 def load_data(
     eeg_path: str = EEG_PATH,
     dataname: Optional[str] = None,
+    # select_label: Optional[str] = None,
     cache_path: Optional[str] = "temp"
 ) -> EEGData:
     """
@@ -96,14 +54,21 @@ def load_data(
 
     if dataname == 'deap':
         # DEAP dataset processing
-        eeg_files = [os.path.join(eeg_path, f) for f in os.listdir(eeg_path) if os.path.isfile(os.path.join(eeg_path, f))]
-        eeg_datas, labels = zip(*[
-            (np.array(data['data'][:, :32, :]), np.array(data['labels']))
-            for file in eeg_files
-            for data in [pickle.load(open(file, 'rb'), encoding='latin1')]
-        ])
+        try:
+            eeg_files = [os.path.join(eeg_path, f) for f in os.listdir(eeg_path) if os.path.isfile(os.path.join(eeg_path, f))]
+            eeg_datas, labels = zip(*[
+                (np.array(data['data'][:, :32, :]), np.array(data['labels']))
+                for file in eeg_files
+                for data in [pickle.load(open(file, 'rb'), encoding='latin1')]
+            ])
+        except Exception as e:
+            logging.error(f"Error loading data for '{dataname}': {e}")
+            raise
 
         eeg_data = EEGData(dataname=dataname, data=np.array(eeg_datas), labels=np.array(labels), fs=128)
+    
+    
+    
     else:
         # Placeholder for other datasets
         raise NotImplementedError(f"Data processing for dataset '{dataname}' is not implemented yet.")
@@ -175,26 +140,25 @@ def slice_data(
     return sliced_eeg_data
 
 
-# def map_data_to_matrix(eeg_data: EEGData) -> np.ndarray:
-#     """
-#     Map EEG data to a 9x9 matrix based on channel positions.
+def map_data_to_matrix(eeg_data: EEGData) -> np.ndarray:
+    """
+    Map EEG data to a 9x9 matrix based on channel positions.
 
-#     Args:
-#         eeg_data: EEGData object containing EEG data.
+    Args:
+        eeg_data: EEGData object containing EEG data.
 
-#     Returns:
-#         Mapped EEG data with shape (n_samples, 9, 9, n_timepoints).
-#     """
-#     logging.info('Mapping EEG data to 9x9 matrix...')
-#     mapped_data = np.zeros((eeg_data.data.shape[0], 9, 9, eeg_data.data.shape[2]))
-#     for channel_idx, (row, col) in enumerate(CHANNEL_POSITIONS):
-#         if 0 <= row < 9 and 0 <= col < 9:
-#             mapped_data[:, row, col, :] = eeg_data.data[:, channel_idx, :]
-#         else:
-#             raise ValueError(f"Invalid position ({row}, {col}) for channel {channel_idx}")
-
-#     logging.info(f'Mapped EEG data shape: {mapped_data.shape}')
-#     return mapped_data
+    Returns:
+        Mapped EEG data with shape (n_samples, 9, 9, n_timepoints).
+    """
+    logging.info('Mapping EEG data to 9x9 matrix...')
+    mapped_data = np.zeros((eeg_data.data.shape[0], 9, 9, eeg_data.data.shape[2]))
+    for channel_idx, (row, col) in enumerate(CHANNEL_POSITIONS):
+        if 0 <= row < 9 and 0 <= col < 9:
+            mapped_data[:, row, col, :] = eeg_data.data[:, channel_idx, :]
+        else:
+            raise ValueError(f"Invalid position ({row}, {col}) for channel {channel_idx}")
+    logging.info(f'Mapped EEG data shape: {mapped_data.shape}')
+    return mapped_data
 
 
 if __name__ == '__main__':
@@ -209,5 +173,3 @@ if __name__ == '__main__':
     print(sliced_eeg_data.data.shape)
     print(sliced_eeg_data.labels.shape)
 
-    # Map data to 9x9 matrix
-    # mapped_data = map_data_to_matrix(sliced_eeg_data)

@@ -2,11 +2,13 @@ import os
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, models
+from tensorflow.keras.layers import Conv2D, Dense, BatchNormalization, Dropout, Conv1D, Permute, Reshape, Flatten, DepthwiseConv2D, Activation, AveragePooling2D
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 import logging
 import matplotlib.pyplot as plt
 from typing import Optional, Tuple
+from abc import ABC, abstractmethod
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,48 +24,148 @@ FREQUENCY_BANDS = {
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+class MyDEAPModel(tf.keras.Model):
+    def __init__(self, input_shape, num_classes):
+        super(MyDEAPModel, self).__init__()
+        # 第一层 Conv2D
+        self.conv2d_1 = Conv2D(128, kernel_size=(1, 128), strides=(1, 1), padding='same', activation='relu', input_shape=input_shape)
+        self.bn_1 = BatchNormalization()
+        self.dropout_1 = Dropout(0.3)
 
-class DeepLearningModel(tf.keras.Model):
-    """
-    A deep learning model for EEG classification.
-    """
-    def __init__(self, input_shape: tuple, num_classes: int):
+        # 第二层 Conv2D
+        self.conv2d_2 = Conv2D(128, kernel_size=(1, 3), strides=(1, 1), padding='same', activation='relu')
+        self.bn_2 = BatchNormalization()
+        self.dropout_2 = Dropout(0.3)
+
+        # 第三层 Conv2D
+        self.conv2d_3 = Conv2D(64, kernel_size=(input_shape[0], 1), strides=(1, 1), padding='valid', activation='relu')
+        self.bn_3 = BatchNormalization()
+        self.dropout_3 = Dropout(0.3)
+
+        # Permute 和 Reshape 层
+        self.permute = Permute((2, 1, 3))
+        self.reshape = Reshape((input_shape[1], -1))
+
+        # 第一层 Conv1D
+        self.conv1d_1 = Conv1D(64, kernel_size=3, strides=1, padding='same', activation='relu')
+        self.bn_4 = BatchNormalization()
+        self.dropout_4 = Dropout(0.3)
+
+        # 第二层 Conv1D
+        self.conv1d_2 = Conv1D(64, kernel_size=3, strides=1, padding='same', activation='relu')
+        self.bn_5 = BatchNormalization()
+        self.dropout_5 = Dropout(0.3)
+
+        # Flatten 层
+        self.flatten = Flatten()
+
+        # 全连接层
+        self.dense_1 = Dense(128, activation='relu')
+        self.bn_6 = BatchNormalization()
+        self.dropout_6 = Dropout(0.5)
+
+        self.dense_2 = Dense(64, activation='relu')
+        self.bn_7 = BatchNormalization()
+        self.dropout_7 = Dropout(0.5)
+
+        # 输出层
+        self.dense_output = Dense(num_classes, activation='softmax')
+
+    def call(self, inputs):
+        # 前向传播过程
+        x = self.conv2d_1(inputs)
+        x = self.bn_1(x)
+        x = self.dropout_1(x)
+
+        x = self.conv2d_2(x)
+        x = self.bn_2(x)
+        x = self.dropout_2(x)
+
+        x = self.conv2d_3(x)
+        x = self.bn_3(x)
+        x = self.dropout_3(x)
+
+        x = self.permute(x)
+        x = self.reshape(x)
+
+        x = self.conv1d_1(x)
+        x = self.bn_4(x)
+        x = self.dropout_4(x)
+
+        x = self.conv1d_2(x)
+        x = self.bn_5(x)
+        x = self.dropout_5(x)
+
+        x = self.flatten(x)
+
+        x = self.dense_1(x)
+        x = self.bn_6(x)
+        x = self.dropout_6(x)
+
+        x = self.dense_2(x)
+        x = self.bn_7(x)
+        x = self.dropout_7(x)
+
+        return self.dense_output(x)
+
+class EEGNet(tf.keras.Model):
+    def __init__(self, input_shape, num_classes, F1=8, D=2, F2=16, kernel_length=64, dropout_rate=0.5):
         """
-        Initialize the model.
+        EEGNet model for EEG signal classification.
 
         Args:
-            input_shape: Shape of the input data (n_channels, n_timepoints).
+            input_shape: Shape of the input data (e.g., (n_channels, n_timepoints, 1)).
             num_classes: Number of output classes.
+            F1: Number of temporal filters.
+            D: Depth multiplier for depthwise convolution.
+            F2: Number of pointwise filters.
+            kernel_length: Length of the temporal convolution kernel.
+            dropout_rate: Dropout rate.
         """
-        super(DeepLearningModel, self).__init__()
-        self.conv1 = layers.Conv1D(32, kernel_size=3, strides=1, padding='same', activation='relu')
-        self.conv2 = layers.Conv1D(64, kernel_size=3, strides=1, padding='same', activation='relu')
-        self.pool = layers.MaxPooling1D(pool_size=2, strides=2)
-        self.flatten = layers.Flatten()
-        self.fc1 = layers.Dense(128, activation='relu')
-        self.dropout = layers.Dropout(0.5)
-        self.fc2 = layers.Dense(num_classes, activation='softmax')
+        super(EEGNet, self).__init__()
+
+        # Block 1: Temporal Convolution
+        self.conv2d_1 = Conv2D(F1, (1, kernel_length), padding='same', use_bias=False, input_shape=input_shape)
+        self.bn_1 = BatchNormalization()
+        self.depthwise_conv2d = DepthwiseConv2D((input_shape[0], 1), depth_multiplier=D, use_bias=False, padding='valid')
+        self.bn_2 = BatchNormalization()
+        self.activation_1 = Activation('elu')
+        self.avg_pool_1 = AveragePooling2D((1, 4))
+        self.dropout_1 = Dropout(dropout_rate)
+
+        # Block 2: Spatial Convolution
+        self.conv2d_2 = Conv2D(F2, (1, 16), padding='same', use_bias=False)
+        self.bn_3 = BatchNormalization()
+        self.activation_2 = Activation('elu')
+        self.avg_pool_2 = AveragePooling2D((1, 8))
+        self.dropout_2 = Dropout(dropout_rate)
+
+        # Flatten and Dense layers
+        self.flatten = Flatten()
+        self.dense = Dense(num_classes, activation='softmax')
 
     def call(self, inputs, training=False):
-        """
-        Forward pass of the model.
+        # Block 1: Temporal Convolution
+        x = self.conv2d_1(inputs)
+        x = self.bn_1(x, training=training)
+        x = self.depthwise_conv2d(x)
+        x = self.bn_2(x, training=training)
+        x = self.activation_1(x)
+        x = self.avg_pool_1(x)
+        x = self.dropout_1(x, training=training)
 
-        Args:
-            inputs: Input tensor with shape (batch_size, n_channels, n_timepoints).
-            training: Whether the model is in training mode.
+        # Block 2: Spatial Convolution
+        x = self.conv2d_2(x)
+        x = self.bn_3(x, training=training)
+        x = self.activation_2(x)
+        x = self.avg_pool_2(x)
+        x = self.dropout_2(x, training=training)
 
-        Returns:
-            Output tensor with shape (batch_size, num_classes).
-        """
-        x = self.conv1(inputs)
-        x = self.pool(x)
-        x = self.conv2(x)
-        x = self.pool(x)
+        # Flatten and Dense layers
         x = self.flatten(x)
-        x = self.fc1(x)
-        x = self.dropout(x, training=training)
-        return self.fc2(x)
+        x = self.dense(x)
 
+        return x
 def create_dataset(data: np.ndarray, labels: np.ndarray, batch_size: int = 32, shuffle: bool = True) -> tf.data.Dataset:
     """
     Create a TensorFlow Dataset from numpy arrays.
@@ -77,6 +179,7 @@ def create_dataset(data: np.ndarray, labels: np.ndarray, batch_size: int = 32, s
     Returns:
         A TensorFlow Dataset.
     """
+    data = np.expand_dims(data, axis=-1)  # Add a single channel dimension
     dataset = tf.data.Dataset.from_tensor_slices((data, labels))
     if shuffle:
         dataset = dataset.shuffle(buffer_size=len(data))
@@ -208,7 +311,9 @@ def main():
 
     # Initialize model
     input_shape = X_train.shape[1:]  # (n_channels, n_timepoints)
-    model = DeepLearningModel(input_shape=input_shape, num_classes=2)
+    # model = MyDEAPModel(input_shape=input_shape, num_classes=2)
+
+    model = EEGNet(input_shape=input_shape, num_classes=2)
 
     # Train model
     metrics = train_model(model, train_dataset, test_dataset, num_epochs=10, learning_rate=0.001)

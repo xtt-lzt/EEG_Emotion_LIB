@@ -86,8 +86,6 @@ def extract_features(
     features = {}
 
     for feature_type in feature_list:
-        if feature_type not in ['psd', 'de']:
-            raise ValueError(f"Unsupported feature type: {feature_type}. Supported types are 'psd' and 'de'.")
 
         # Initialize a list to store feature data for all frequency bands
         feature_data = []

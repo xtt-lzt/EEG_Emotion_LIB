@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 import logging
 from eeg_data import EEGData
 
-CACHE_DIR = r'C:\Users\zitao\project\temp_data'
+CACHE_DIR = 'temp'
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -39,13 +39,14 @@ def prepare_data(eeg_data) -> Tuple[np.ndarray, np.ndarray]:
     X = np.hstack(feature_list)  # Shape: (n_samples, n_channels * n_bands * n_feature_types)
     
     # Flatten labels to match the number of samples
-    y = (eeg_data.labels[:, 1]>5).astype(int)  # Shape: (n_samples,)
+    y = eeg_data.labels
+    # y = (eeg_data.labels[:, 1]>5).astype(int)  # Shape: (n_samples,)
     
     logging.info(f'Feature matrix shape: {X.shape}')
     logging.info(f'Label vector shape: {y.shape}')
     return X, y
 
-def train_and_evaluate(X: np.ndarray, y: np.ndarray, model_type: str = 'svm', test_size: float = 0.2, random_state: int = 42):
+def train_and_evaluate(X: np.ndarray, y: np.ndarray, model_type: str = 'svm', test_size: float = 0.2, random_state: int = 42, cache_path: Optional[str] = CACHE_DIR):
     """
     Train and evaluate a machine learning model.
 
@@ -93,6 +94,9 @@ def train_and_evaluate(X: np.ndarray, y: np.ndarray, model_type: str = 'svm', te
     logging.info(f'Test accuracy: {accuracy:.4f}')
     logging.info('Classification report:\n' + classification_report(y_test, y_pred))
     
+    import joblib
+    joblib.dump(model, os.path.join(cache_path, f'trained_model: {model_type}.pkl'))
+
     return model, accuracy
 
 if __name__ == '__main__':
@@ -113,6 +117,7 @@ if __name__ == '__main__':
 
     # Prepare data for machine learning
     X, y = prepare_data(eeg_data_with_features)
+    y = (y[:, 1]>5).astype(int)  # Use valence as binary label
 
     # Train and evaluate a model
     model, accuracy = train_and_evaluate(X, y, model_type='svm')
