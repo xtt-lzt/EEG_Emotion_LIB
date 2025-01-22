@@ -8,6 +8,7 @@ from sklearn.metrics import accuracy_score, classification_report
 from typing import Optional, Tuple
 import logging
 from eeg_data import EEGData
+import os
 
 CACHE_DIR = 'temp'
 

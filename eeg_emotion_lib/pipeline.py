@@ -1,116 +1,64 @@
+import os
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, classification_report
-from eegemotionlib.data_loader import load_eeg_data  # 假设你有一个数据加载模块
+from sklearn.metrics import classification_report, confusion_matrix
+import matplotlib.pyplot as plt
 
-class EEGEmotionPipeline:
-    def __init__(self, model=None):
-        """
-        初始化 EEG 情感识别管道。
-        
-        :param model: 使用的机器学习模型，默认为 SVM。
-        """
-        if model is None:
-            self.model = SVC(kernel='linear')
-        else:
-            self.model = model
-        
-        self.pipeline = Pipeline([
-            ('scaler', StandardScaler()),  # 数据标准化
-            ('classifier', self.model)     # 分类器
-        ])
+# 导入自定义模块
+from eeg_data import EEGData
+from preprocess import load_data, slice_data, map_data_to_matrix
+from feature_extraction import extract_features
+from classification import prepare_data, train_and_evaluate
+from model import train_and_evaluate_deep_model
+from visualization import plot_confusion_matrix
+import tensorflow as tf
+from tensorflow.keras import layers
 
-    def load_data(self, data_path):
-        """
-        加载 EEG 数据。
-        
-        :param data_path: 数据路径。
-        :return: X (特征), y (标签)
-        """
-        self.X, self.y = load_eeg_data(data_path)
-        return self.X, self.y
+def DEAP_main(data_path):
+    # Load data
+    eeg_data = slice_data(load_data(dataname='deap'))
 
-    def preprocess_data(self, test_size=0.2, random_state=42):
-        """
-        数据预处理，包括划分训练集和测试集。
-        
-        :param test_size: 测试集比例。
-        :param random_state: 随机种子。
-        :return: X_train, X_test, y_train, y_test
-        """
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
-            self.X, self.y, test_size=test_size, random_state=random_state
-        )
-        return self.X_train, self.X_test, self.y_train, self.y_test
+    # Extract features
+    eeg_data_with_features = extract_features(
+        eeg_data,
+        feature_list=['psd', 'de'],  # Extract both PSD and DE
+    )
 
-    def train(self):
-        """
-        训练模型。
-        """
-        self.pipeline.fit(self.X_train, self.y_train)
+    # Prepare data for machine learning
+    X, y = prepare_data(eeg_data_with_features)
+    y_1 = (y[:, 0]>5).astype(int)  # Use valence as binary label
+    y_2 = (y[:, 1]>5).astype(int)
 
-    def evaluate(self):
-        """
-        评估模型性能。
-        """
-        y_pred = self.pipeline.predict(self.X_test)
-        accuracy = accuracy_score(self.y_test, y_pred)
-        report = classification_report(self.y_test, y_pred)
-        
-        print(f"Accuracy: {accuracy:.4f}")
-        print("Classification Report:")
-        print(report)
+    # Train and evaluate a model
+    # ml_model, accuracy = train_and_evaluate(X, y, model_type='svm')
+    # train_and_evaluate(X, y, model_type='logistic_regression')
+    # train_and_evaluate(X, y, model_type='random_forest')
+    # train_and_evaluate(X, y, model_type='xgboost')
 
-    def save_model(self, model_path):
-        """
-        保存训练好的模型。
-        
-        :param model_path: 模型保存路径。
-        """
-        import joblib
-        joblib.dump(self.pipeline, model_path)
+    data = eeg_data.data
+    # train_and_evaluate_deep_model(data, y_2, model_type='EEGNet', test_size=0.2, random_state=42, num_epochs=50, batch_size=32, learning_rate=0.001)
+    # data_3d = map_data_to_matrix(eeg_data)
 
-    def load_model(self, model_path):
-        """
-        加载已训练的模型。
-        
-        :param model_path: 模型路径。
-        """
-        import joblib
-        self.pipeline = joblib.load(model_path)
+    # model_3d, accuracy = train_and_evaluate_deep_model(
+    #     data_3d, y, model_type='CNN3DModel', test_size=0.2, random_state=42, num_epochs=20, batch_size=32, learning_rate=0.001
+    # )
+    # train_and_evaluate_deep_model(data, y, model_type='MyDEAPModel', test_size=0.2, random_state=42, num_epochs=50, batch_size=32, learning_rate=0.001)
+    # train_and_evaluate_deep_model(data, y_1, model_type='MyRNNModel', test_size=0.2, random_state=42, num_epochs=10, batch_size=32, learning_rate=0.001)
+    # train_and_evaluate_deep_model(data, y_2, model_type='MyRNNModel', test_size=0.2, random_state=42, num_epochs=10, batch_size=32, learning_rate=0.001)
 
-    def predict(self, X):
-        """
-        使用训练好的模型进行预测。
-        
-        :param X: 输入数据。
-        :return: 预测结果。
-        """
-        return self.pipeline.predict(X)
+    # train_and_evaluate_deep_model(data, y, model_type='MyDEAPModel', test_size=0.2, random_state=42, num_epochs=50, batch_size=32, learning_rate=0.001)
+    # train_and_evaluate_deep_model(data, y, model_type='EEGNet', test_size=0.2, random_state=42, num_epochs=50, batch_size=32, learning_rate=0.001)
 
-# 示例用法
+    data_3d = map_data_to_matrix(eeg_data)
+    data_3d = (data_3d - np.mean(data_3d, axis=(0, 1, 2, 3), keepdims=True)) / np.std(data_3d, axis=(0, 1, 2, 3), keepdims=True)
+
+
+    model_3d, accuracy = train_and_evaluate_deep_model(
+        data_3d, y_1, model_type='CNN3DModel', test_size=0.2, random_state=42, num_epochs=10, batch_size=240, learning_rate=0.001)
+
+
+
+
 if __name__ == "__main__":
-    pipeline = EEGEmotionPipeline()
-    
-    # 加载数据
-    X, y = pipeline.load_data("path/to/eeg_data.csv")
-    
-    # 数据预处理
-    X_train, X_test, y_train, y_test = pipeline.preprocess_data()
-    
-    # 训练模型
-    pipeline.train()
-    
-    # 评估模型
-    pipeline.evaluate()
-    
-    # 保存模型
-    pipeline.save_model("eeg_emotion_model.pkl")
-    
-    # 加载模型并进行预测
-    pipeline.load_model("eeg_emotion_model.pkl")
-    predictions = pipeline.predict(X_test)
-    print("Predictions:", predictions)
+    data_path = "path_to_your_data"
+    DEAP_main(data_path)
